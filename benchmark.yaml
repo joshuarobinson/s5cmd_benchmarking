@@ -1,0 +1,87 @@
+- name: s5cmd benchmarking
+  hosts: irp210
+  vars:
+    # S3 Target to test: endpoint, bucket, and key prefix to use.
+    s3endpoint: "10.62.64.200"
+    s3bucket: "benchmarking"
+    s3prefix: "s5"
+    # Test parameters: object size and number
+    object_size: "4m"
+    object_count: "7000"
+    # Test data source for object.
+    compressibility_ratio: "1.8"
+  vars_files:
+    # S3 access/secret keys stored in a separate file (not in version control).
+    # This file should include variables "s3_access_key" and "s3_secret_key"
+    - s3credentials.yaml
+  tasks:
+  - name: Pull docker images
+    docker_image:
+      name: "{{ item }}"
+      state: present
+    loop:
+      - joshuarobinson/s5cmd
+      - joshuarobinson/lzdatagen
+  - name: Create volume for temporary data
+    # Create a docker volume to hold the synthetic data.
+    docker_volume:
+      name: workingset
+  - name: Create test data
+    docker_container:
+      name: s5cmd-bench-gen
+      image: joshuarobinson/lzdatagen
+      command: "lzdgen -f --ratio {{ compressibility_ratio }} --size {{ object_size }} /working/somebytes"
+      state: started
+      detach: no
+      auto_remove: yes
+      volumes:
+        - workingset:/working
+  - name: s5cmd Write data to S3 in parallel
+    docker_container:
+      name: s5cmd-bench-write
+      image: joshuarobinson/s5cmd
+      command: >
+        sh -c
+        "seq {{ object_count }}
+        | xargs -I {} echo 'cp /working/somebytes s3://{{ s3bucket }}/{{ s3prefix }}/{{ inventory_hostname }}/{}'
+        | s5cmd --endpoint-url http://{{ s3endpoint }} -f -"
+      state: started
+      detach: no
+      auto_remove: yes
+      env:
+        AWS_ACCESS_KEY_ID={{ s3_access_key }}
+        AWS_SECRET_ACCESS_KEY={{ s3_secret_key }}
+      volumes:
+        - workingset:/working
+  - name: s5cmd Read all written data
+    docker_container:
+      name: s5cmd-bench-read
+      image: joshuarobinson/s5cmd
+      # The read command is taking the output of a LIST, doing some transformations into command format, and piping into a second s5cmd process.
+      command: >
+        sh -c
+        "s5cmd --endpoint-url http://{{ s3endpoint }} ls s3://{{ s3bucket }}/{{ s3prefix }}/*
+        | grep -v DIR | awk '{print $NF}' | shuf
+        | xargs -I {} echo 'cp s3://{{ s3bucket }}/{{ s3prefix }}/{} /dev/null'
+        | s5cmd --endpoint-url http://{{ s3endpoint }} -f -"
+      state: started
+      detach: no
+      auto_remove: yes
+      env:
+        AWS_ACCESS_KEY_ID={{ s3_access_key }}
+        AWS_SECRET_ACCESS_KEY={{ s3_secret_key }}
+  - name: s5cmd Cleanup data on S3
+    docker_container:
+      name: s5cmd-bench-clean
+      image: joshuarobinson/s5cmd
+      command: "s5cmd --endpoint-url http://{{ s3endpoint }} rm s3://{{ s3bucket }}/{{ s3prefix }}/{{ inventory_hostname }}/*"
+      state: started
+      detach: no
+      auto_remove: yes
+      env:
+        AWS_ACCESS_KEY_ID={{ s3_access_key }}
+        AWS_SECRET_ACCESS_KEY={{ s3_secret_key }}
+  - name: Remove volume for temporary data
+    docker_volume:
+      name: workingset
+      state: absent
