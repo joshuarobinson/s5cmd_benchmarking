@@ -6,10 +6,10 @@
     s3bucket: "benchmarking"
     s3prefix: "s5"
     # Test parameters: object size and number
-    object_size: "4m"
-    object_count: "5000"
+    object_size: "2m"
+    object_count: "4000"
     # Test data source for object.
-    compressibility_ratio: "3.8"
+    compressibility_ratio: "2.5"
   vars_files:
     # S3 access/secret keys stored in a separate file (not in version control).
     # This file should include variables "s3_access_key" and "s3_secret_key"
@@ -46,8 +46,9 @@
       command: >
         sh -c
         "seq {{ object_count }}
+        | awk '1;1;1;1;1' | shuf
         | xargs -I {} echo 'cp /working/somebytes s3://{{ s3bucket }}/{{ s3prefix }}/{{ inventory_hostname }}/{}'
-        | s5cmd --endpoint-url http://{{ s3endpoint }} -f -"
+        | s5cmd --endpoint-url http://{{ s3endpoint }} run"
       state: started
       detach: no
       auto_remove: yes
@@ -66,7 +67,7 @@
         "s5cmd --endpoint-url http://{{ s3endpoint }} ls s3://{{ s3bucket }}/{{ s3prefix }}/*
         | grep -v DIR | awk '{print $NF}' | shuf
         | xargs -I {} echo 'cp s3://{{ s3bucket }}/{{ s3prefix }}/{} /dev/null'
-        | s5cmd -numworkers 32 --endpoint-url http://{{ s3endpoint }} -f -"
+        | s5cmd -numworkers 64 --endpoint-url http://{{ s3endpoint }} run"
       state: started
       detach: no
       auto_remove: yes
