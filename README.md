@@ -1,7 +1,7 @@
 # s5cmd_benchmarking
 Benchmarking object storage with s5cmd and ansible.
 
-Use the following Ansible playbook for simple S3 benchmarking.
+Use the following Ansible playbook for simple S3 benchmarking. For more detailed explanation see the [accompanying blog post](https://medium.com/@joshua_robinson/s5cmd-hits-v1-0-and-intro-to-advanced-usage-37ad02f7e895).
 
 Required:
  * Install Ansible and configure host group, update playbook with host group.
@@ -14,4 +14,4 @@ An example credentials file is included in the repository, please add your keys 
 
 This benchmark is designed for storage systems that may do inline compression but NOT dedupe. To modify the compression factor, update the compressibility_ratio variable to N where the resulting data should compress N:1. The dataset generator is based on the [lzdatagen utility](https://github.com/jibsen/lzdatagen).
 
-This playbook is designed for the [# of forks](https://docs.ansible.com/ansible/latest/reference_appendices/config.html#default-forks) to be as large as the host group so that each task is executed in parallel on all hosts.
+This playbook is designed for the [# of forks](https://docs.ansible.com/ansible/latest/reference_appendices/config.html#default-forks) to be as large as the host group so that each task is executed in parallel on all hosts. Is also recommended to use the following option in your ansible.cfg for timing information per step: `callback_whitelist = profile_tasks.`
